@@ -217,6 +217,8 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
 }
 
 - (NSTimeInterval)connectDuration {
+    [self checkCurrentThreadIsRegisteredWithPJSUA];
+    
     // Check if call was ever connected before.
     if (self.callId == PJSUA_INVALID_ID) {
         return 0;
@@ -235,6 +237,13 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
     }
 }
 
+- (void)checkCurrentThreadIsRegisteredWithPJSUA {
+    static pj_thread_desc a_thread_desc;
+    if (!pj_thread_is_registered()) {
+        static pj_thread_t *a_thread;
+        pj_thread_register("VialerPJSIP", a_thread_desc, &a_thread);
+    }
+}
 #pragma mark - Actions
 
 - (void)startWithCompletion:(void (^)(NSError * error))completion {
