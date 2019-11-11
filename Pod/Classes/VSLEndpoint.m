@@ -209,7 +209,8 @@ static void onTransportStateChanged(pjsip_transport *tp, pjsip_transport_state s
     mediaConfig.no_vad = PJ_FALSE;
     mediaConfig.ec_tail_len = 200;
     mediaConfig.ec_options = 1;
-    mediaConfig.quality = 10;
+    mediaConfig.quality = 4;
+    mediaConfig.ptime = 80;
 
     // Initialize Endpoint.
     status = pjsua_init(&endpointConfig, &logConfig, &mediaConfig);
