@@ -38,18 +38,6 @@ NSString * const VSLNotificationUserInfoErrorStatusMessageKey = @"VSLNotificatio
     return sharedInstance;
 }
 
-+ (BOOL)callKitAvailable {
-    // Check if Callkit is available by checking the CallKit classes used
-    if (@available(iOS 10.0, *)) {
-        if ([CXAction class] && [CXTransaction class] && [CXCall class]) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return false;
-}
-
 - (VSLEndpoint *)endpoint {
     if (!_endpoint) {
         _endpoint = [VSLEndpoint sharedEndpoint];
@@ -78,7 +66,9 @@ NSString * const VSLNotificationUserInfoErrorStatusMessageKey = @"VSLNotificatio
 
 - (BOOL)configureLibraryWithEndPointConfiguration:(VSLEndpointConfiguration * _Nonnull)endpointConfiguration error:(NSError * _Nullable __autoreleasing *)error {
     // Make sure interrupts are handled by pjsip
-    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    });    
 
     // Start the Endpoint
     NSError *endpointConfigurationError;
@@ -93,8 +83,12 @@ NSString * const VSLNotificationUserInfoErrorStatusMessageKey = @"VSLNotificatio
     return success;
 }
 
+- (BOOL)shouldRemoveEndpoint {
+    return (self.endpointAvailable && self.accounts.count == 0);
+}
+
 - (void)removeEndpoint {
-    if (self.endpointAvailable && self.accounts.count == 0) {
+    if ([self shouldRemoveEndpoint]){
         [self.endpoint destroyPJSUAInstance];
     }
 }

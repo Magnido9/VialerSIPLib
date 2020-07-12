@@ -1,6 +1,49 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+---
+## [3.7.2](https://github.com/VoIPGRID/VialerSIPLib/tree/3.7.2) (30/6/2020)
+
+Released on Tuesday, June 30, 2020
+
+### Fixed
+- Fixed reinvite for cases which were failing. 
+---
+## [3.7.1](https://github.com/VoIPGRID/VialerSIPLib/tree/3.7.1) (6/4/2020)
+
+Released on Monday, Apr 4, 2020
+
+### Fixed
+- Fixed various threading issues which were causing crashes 
+---
+## [3.7.0](https://github.com/VoIPGRID/VialerSIPLib/tree/3.7.0) (21/2/2020)
+
+Released on Friday, Feb 21, 2020
+
+### Fixed
+- Better debug information
+
+### Added
+- Handling end of ip change event added by PJSIP 2.10.
+- Make use of updated Vialer-pjsip-iOS library providing updates for:
+- PJSIP 2.10
+- h264 2.0.0
+- opus 1.3.1
+- OpenSSL 1.1.1d
+---
+## [3.6.0](https://github.com/VoIPGRID/VialerSIPLib/tree/3.6.0) (20/1/2020)
+
+Released on Monday, Jan 20, 2020
+
+### Fixed
+- Applied VAD setting only when using OPUS.
+- Dropped 9.0 ios support.
+- Various threading issues.
+- Various logging improvements.
+
+### Added
+- Implementation for ios 13 voip push notifications handling.  
+---
 
 ## [3.5.6](https://github.com/VoIPGRID/VialerSIPLib/tree/3.5.6) (29/7/2019)
 

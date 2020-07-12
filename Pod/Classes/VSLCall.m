@@ -4,7 +4,6 @@
 //
 
 #import "VSLCall.h"
-
 #import <AVFoundation/AVFoundation.h>
 #import "NSError+VSLError.h"
 #import "NSString+PJString.h"
@@ -37,7 +36,6 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
 @property (readwrite, nonatomic) NSString *remoteURI;
 @property (readwrite, nonatomic) NSString *callerName;
 @property (readwrite, nonatomic) NSString *callerNumber;
-@property (readwrite, nonatomic) NSInteger callId;
 @property (readwrite, nonatomic) NSString *messageCallId;
 @property (readwrite, nonatomic) NSUUID *uuid;
 @property (readwrite, nonatomic) BOOL incoming;
@@ -52,14 +50,11 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
 @property (readwrite, nonatomic) VSLCallTransferState transferStatus;
 @property (readwrite, nonatomic) NSTimeInterval lastSeenConnectDuration;
 @property (strong, nonatomic) NSString *numberToCall;
-@property (weak, nonatomic) VSLAccount *account;
-@property (nonatomic) BOOL reinviteCall;
 @property (readwrite, nonatomic) NSTimer *audioCheckTimer;
 @property (readwrite, nonatomic) int audioCheckTimerFired;
 @property (readwrite, nonatomic) VSLCallAudioState callAudioState;
 @property (readwrite, nonatomic) int previousRxPkt;
 @property (readwrite, nonatomic) int previousTxPkt;
-@property (readwrite, nonatomic) SipInvite *invite;
 /**
  *  Stats
  */
@@ -110,6 +105,14 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
     self.invite = invite;
     
     return [self initInboundCallWithCallId:callId account:account];
+}
+
+- (instancetype _Nullable)initInboundCallWithUUID:(NSUUID * _Nonnull)uuid number:(NSString * _Nonnull)number name:(NSString * _Nonnull)name {
+    self.uuid = uuid;
+    self.callerNumber = [VialerUtils cleanPhoneNumber:number];
+    self.incoming = YES;
+    self.callerName = name;
+    return self;
 }
 
 - (void)dealloc {
@@ -245,6 +248,13 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
     }
 }
 #pragma mark - Actions
+- (void)checkCurrentThreadIsRegisteredWithPJSUA {
+    static pj_thread_desc a_thread_desc;
+    static pj_thread_t *a_thread;
+    if (!pj_thread_is_registered()) {
+        pj_thread_register("VialerPJSIP", a_thread_desc, &a_thread);
+    }
+}
 
 - (void)startWithCompletion:(void (^)(NSError * error))completion {
     NSAssert(self.account, @"An account must be set to be able to start a call");
@@ -260,12 +270,16 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
         callSetting.flag &= ~PJSUA_CALL_INCLUDE_DISABLED_MEDIA;
     }
 
+    [self checkCurrentThreadIsRegisteredWithPJSUA];
     pj_status_t status = pjsua_call_make_call((int)self.account.accountId, &sipUri, &callSetting, NULL, NULL, (int *)&_callId);
-    VSLLogVerbose(@"Call(%@) received id:%ld", self.uuid.UUIDString, (long)self.callId);
+    VSLLogVerbose(@"Call(%@) started with id:%ld", self.uuid.UUIDString, (long)self.callId);
 
     NSError *error;
     if (status != PJ_SUCCESS) {
-        VSLLogError(@"Error creating call");
+        char statusmsg[PJ_ERR_MSG_SIZE];
+        pj_strerror(status, statusmsg, sizeof(statusmsg));
+        VSLLogError(@"Error creating call, status: %s", statusmsg);
+
         error = [NSError VSLUnderlyingError:nil
                     localizedDescriptionKey:NSLocalizedString(@"Could not setup call", nil)
                 localizedFailureReasonError:[NSString stringWithFormat:NSLocalizedString(@"PJSIP status code: %d", nil), status]
@@ -314,9 +328,9 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
         VSLLogError(@"Error holding call: %@", error);
         return NO;
     }
-    pj_status_t success = pjsua_call_xfer_replaces((pjsua_call_id)self.callId, (pjsua_call_id)secondCall.callId, 0, nil);
+    pj_status_t status = pjsua_call_xfer_replaces((pjsua_call_id)self.callId, (pjsua_call_id)secondCall.callId, 0, nil);
 
-    if (success == PJ_SUCCESS) {
+    if (status == PJ_SUCCESS) {
         self.transferStatus = VSLCallTransferStateInitialized;
         return YES;
     }
@@ -343,23 +357,25 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
     if (self.callState > VSLCallStateNull && self.callState < VSLCallStateDisconnected) {
         pjsua_call_setting callSetting;
         pjsua_call_setting_default(&callSetting);
-
-        VSLIpChangeConfiguration *ipChangeConfiguration = [VSLEndpoint sharedEndpoint].endpointConfiguration.ipChangeConfiguration;
-        if (ipChangeConfiguration) {
-            callSetting.flag = ipChangeConfiguration.ipAddressChangeReinviteFlags;
-        }
+        
+        callSetting.flag = PJSUA_CALL_REINIT_MEDIA + PJSUA_CALL_NO_SDP_OFFER;
+                
         if ([VSLEndpoint sharedEndpoint].endpointConfiguration.disableVideoSupport) {
             callSetting.vid_cnt = 0;
-            callSetting.flag &= ~PJSUA_CALL_INCLUDE_DISABLED_MEDIA;
         }
 
+        VSLLogDebug(@"Sending Reinvite.");
         pj_status_t status = pjsua_call_reinvite2((pjsua_call_id)self.callId, &callSetting, NULL);
+        
         if (status != PJ_SUCCESS) {
-            VSLLogError(@"Cannot reinvite for call id: %ld!", (long)self.callId);
-        } else {
-            VSLLogDebug(@"Reinvite sent for call id: %ld", (long)self.callId);
-            self.reinviteCall = YES;
+            char statusmsg[PJ_ERR_MSG_SIZE];
+            pj_strerror(status, statusmsg, sizeof(statusmsg));
+            VSLLogError(@"REINVITE failed for call id: %ld, status: %s.", (long)self.callId, statusmsg);
+                    } else {
+            VSLLogDebug(@"REINVITE successfully sent for call id: %ld", (long)self.callId);
         }
+    } else {
+        VSLLogDebug(@"Can not send call REINVITE because the call is not yet setup or already disconnected.");
     }
 }
 
@@ -380,13 +396,14 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
 
         pj_status_t status = pjsua_call_update2((pjsua_call_id)self.callId, &callSetting, NULL);
         if (status != PJ_SUCCESS) {
-            VSLLogError(@"Cannot sent UPDATE for call id: %ld!", (long)self.callId);
+            char statusmsg[PJ_ERR_MSG_SIZE];
+            pj_strerror(status, statusmsg, sizeof(statusmsg));
+            VSLLogError(@"Cannot sent UPDATE for call id: %ld, status: %s", (long)self.callId, statusmsg);
         } else {
             VSLLogDebug(@"UPDATE sent for call id: %ld", (long)self.callId);
-            self.reinviteCall = YES;
         }
     } else {
-        VSLLogDebug(@"Can not send call update because the call is not yet setup or already disconnected");
+        VSLLogDebug(@"Can not send call UPDATE because the call is not yet setup or already disconnected.");
     }
 }
 
@@ -509,7 +526,10 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
         status = pjsua_call_answer2((int)self.callId, &callSetting, PJSIP_SC_OK, NULL, NULL);
 
         if (status != PJ_SUCCESS) {
-            VSLLogError(@"Could not answer call PJSIP returned status code:%d", status);
+            char statusmsg[PJ_ERR_MSG_SIZE];
+            pj_strerror(status, statusmsg, sizeof(statusmsg));
+            VSLLogError(@"Could not answer call PJSIP returned status: %s", statusmsg);
+
             NSError *error = [NSError VSLUnderlyingError:nil
                                  localizedDescriptionKey:NSLocalizedString(@"Could not answer call", nil)
                              localizedFailureReasonError:[NSString stringWithFormat:NSLocalizedString(@"PJSIP status code: %d", nil), status]
@@ -561,15 +581,16 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
                 }
             }
             
-            // When there is bad or no internet connection, try to set the call to be disconnected when the user presses the hangup button.
-            // To make sure the correct flow is followed to dispatch screens.
+            // Hanging up the call takes some time. It could fail due to a bad or no internet connection.
+            // Check after some delay if the call was indeed disconnected. If it's not the case disconnect it manually.
             __weak VSLCall *weakSelf = self;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(VSLCallDelayTimeCheckSuccessfullHangup * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 if (!weakSelf || weakSelf.callState == VSLCallStateDisconnected) {
-                    return;
+                    return; // After the delay, the call was indeed successfull disconnected.
                 }
                 
-                VSLLogDebug(@"Bad or no internet connection, setting call manual to disconnect.");
+                // The call is still not disconnected, so manual disconnect it anyway.
+                VSLLogDebug(@"Hangup unsuccessfull, possibly due to bad or no internet connection, so manually disconnecting the call.");
                 
                 // Mute the call to make sure the other party can't hear the user anymore.
                 if (!weakSelf.muted) {
@@ -610,6 +631,10 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
         self.muted = !self.muted;
         VSLLogVerbose(self.muted ? @"Microphone muted": @"Microphone unmuted");
     } else {
+        char statusmsg[PJ_ERR_MSG_SIZE];
+        pj_strerror(status, statusmsg, sizeof(statusmsg));
+        VSLLogError(@"Error toggle muting microphone in call %@, status: %s", self.uuid.UUIDString, statusmsg);
+
         if (error != NULL) {
             NSDictionary *userInfo = @{NSLocalizedDescriptionKey:NSLocalizedString(@"Could not toggle mute call", nil),
                                        NSLocalizedFailureReasonErrorKey:[NSString stringWithFormat:NSLocalizedString(@"PJSIP status code: %d", status)]
@@ -617,7 +642,6 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
             *error = [NSError errorWithDomain:VSLCallErrorDomain code:VSLCallErrorCannotToggleMute userInfo:userInfo];
         }
         return NO;
-        VSLLogError(@"Error toggle muting microphone in call %@", self.uuid.UUIDString);
     }
     return YES;
 }
@@ -646,6 +670,10 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
         self.onHold = !self.onHold;
         VSLLogVerbose(self.onHold ? @"Call is on hold": @"On hold state ended");
     } else {
+        char statusmsg[PJ_ERR_MSG_SIZE];
+        pj_strerror(status, statusmsg, sizeof(statusmsg));
+        VSLLogError(@"Error toggle holding in call %@, status: %s", self.uuid.UUIDString, statusmsg);
+
         if (error != NULL) {
             NSDictionary *userInfo = @{NSLocalizedDescriptionKey:NSLocalizedString(@"Could not toggle onhold call", nil),
                                        NSLocalizedFailureReasonErrorKey:[NSString stringWithFormat:NSLocalizedString(@"PJSIP status code: %d", status)]
@@ -653,7 +681,6 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
             *error = [NSError errorWithDomain:VSLCallErrorDomain code:VSLCallErrorCannotToggleHold userInfo:userInfo];
         }
         return NO;
-        VSLLogError(@"Error toggle holding in call %@", self.uuid.UUIDString);
     }
     return YES;
 }
@@ -688,6 +715,10 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
             if (status == PJ_SUCCESS) {
                 VSLLogVerbose(@"Succesfull send character: %@ for DTMF for call %@", character, self.uuid.UUIDString);
             } else {
+                char statusmsg[PJ_ERR_MSG_SIZE];
+                pj_strerror(status, statusmsg, sizeof(statusmsg));
+                VSLLogError(@"Error error sending DTMF for call %@, status: %s", self.uuid.UUIDString, statusmsg);
+
                 if (error != NULL) {
                     NSDictionary *userInfo = @{NSLocalizedDescriptionKey:NSLocalizedString(@"Could not send DTMF", nil),
                                                NSLocalizedFailureReasonErrorKey:[NSString stringWithFormat:NSLocalizedString(@"PJSIP status code: %d", status)]
@@ -695,7 +726,6 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
                     *error = [NSError errorWithDomain:VSLCallErrorDomain code:VSLCallErrorCannotSendDTMF userInfo:userInfo];
                 }
                 return NO;
-                VSLLogError(@"Error error sending DTMF for call %@", self.uuid.UUIDString);
             }
         }
     }

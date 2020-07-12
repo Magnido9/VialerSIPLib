@@ -9,17 +9,17 @@
 
 Pod::Spec.new do |s|
 	s.name             	= "VialerSIPLib"
-	s.version          	= "3.5.6"
+	s.version          	= "3.7.2"
 	s.summary          	= "Vialer SIP Library for iOS"
 	s.description      	= "Objective-C wrapper around PJSIP."
 	s.homepage         	= "https://github.com/VoIPGRID/VialerSIPLib"
 	s.license          	= 'GNU GPL v3'
-	s.author           	= {"Devhouse Spindle" => "vialersiplib@wearespindle.com"}
+	s.author           	= {"Devhouse Spindle" => "opensource@wearespindle.com"}
 
 	s.source           	= {:git => "https://github.com/VoIPGRID/VialerSIPLib.git", :tag => s.version.to_s}
 	s.social_media_url 	= "https://twitter.com/wearespindle"
 
-	s.platform     		= :ios, '9.0'
+	s.platform     		= :ios, '10.0'
 	s.requires_arc 		= true
 
 	s.source_files 		= "Pod/Classes/**/*.{h,m}"
