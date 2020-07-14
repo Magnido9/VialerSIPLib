@@ -220,7 +220,7 @@
 
     NSMutableArray *callsForAccount = [[NSMutableArray alloc] init];
     for (VSLCall *call in self.calls) {
-        if ([call.account isEqual:account]) {
+        if (call.account.accountId == account.accountId) {
             [callsForAccount addObject:call];
         }
     }
