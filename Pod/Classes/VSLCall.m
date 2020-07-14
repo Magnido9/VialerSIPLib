@@ -240,13 +240,6 @@ NSString * const VSLCallErrorDuringSetupCallNotification = @"VSLCallErrorDuringS
     }
 }
 
-- (void)checkCurrentThreadIsRegisteredWithPJSUA {
-    static pj_thread_desc a_thread_desc;
-    if (!pj_thread_is_registered()) {
-        static pj_thread_t *a_thread;
-        pj_thread_register("VialerPJSIP", a_thread_desc, &a_thread);
-    }
-}
 #pragma mark - Actions
 - (void)checkCurrentThreadIsRegisteredWithPJSUA {
     static pj_thread_desc a_thread_desc;
