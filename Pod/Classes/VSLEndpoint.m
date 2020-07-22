@@ -750,7 +750,18 @@ static void onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_
                 [VSLEndpoint sharedEndpoint].incomingCallBlock(call);
             }
         } else {
-            VSLLogWarning(@"Could not find a call with if %d.", call_id);
+            VSLLogInfo(@"Could not find a call with id %d, maybe app is in foreground an no voip push received, try to add call", call_id);
+
+            VSLCall *newCall = [[VSLCall alloc]
+                            initInboundCallWithCallId:call_id
+                            account:account
+                            andInvite:[[SipInvite alloc] initWithInvitePacket:rdata->pkt_info.packet]];
+
+            if (newCall) {
+                [callManager addCall:newCall];
+            } else {
+                VSLLogWarning(@"Still could not find a call with the smae id %d. ", call_id);
+            }
         }
         call = nil;
     } else {
