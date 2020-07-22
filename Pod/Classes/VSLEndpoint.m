@@ -759,6 +759,10 @@ static void onIncomingCall(pjsua_acc_id acc_id, pjsua_call_id call_id, pjsip_rx_
 
             if (newCall) {
                 [callManager addCall:newCall];
+
+                if ([VSLEndpoint sharedEndpoint].incomingCallBlock) {
+                    [VSLEndpoint sharedEndpoint].incomingCallBlock(newCall);
+                }
             } else {
                 VSLLogWarning(@"Still could not find a call with the smae id %d. ", call_id);
             }
