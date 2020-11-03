@@ -308,6 +308,11 @@ typedef NS_ENUM(NSInteger, VSLCallTerminateReason) {
 
 @property (readwrite, nonatomic) SipInvite * _Nullable invite;
 
+/*
+ * Added by tomer zigdon and shabtai dvir, in order to support iOS 13 push restrictions
+ */
+@property (readwrite, nonatomic) NSString * _Nullable isFakeFromPush;
+
 #pragma mark - Stats
 
 /**
