@@ -28,6 +28,8 @@ Pod::Spec.new do |s|
 	s.resource_bundles  = { 'VialerSIPLib' => 'Pod/Resources/*.wav' }
 
 	s.dependency 'Vialer-pjsip-iOS'
+	s.source = { :git => 'https://github.com/AssacNetworks/Vialer-pjsip-iOS.git'}
+	
 	s.dependency 'CocoaLumberjack'
     s.dependency 'Reachability'
 end
