@@ -65,6 +65,7 @@ NSString * const VSLNotificationUserInfoErrorStatusMessageKey = @"VSLNotificatio
 }
 
 - (BOOL)configureLibraryWithEndPointConfiguration:(VSLEndpointConfiguration * _Nonnull)endpointConfiguration error:(NSError * _Nullable __autoreleasing *)error {
+    pj_activesock_enable_iphone_os_bg(PJ_FALSE);
     // Make sure interrupts are handled by pjsip
     dispatch_async(dispatch_get_main_queue(), ^{
         [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
